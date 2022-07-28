@@ -1,0 +1,11 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-default-site
+spec:
+  defaultBackend:
+    service:
+      name: release-name
+      port:
+        number: 80

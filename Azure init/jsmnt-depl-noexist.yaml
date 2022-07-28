@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jsmnt-noexist
+  labels:
+    app: jsmnt-noexist
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jsmnt-noexist
+  template:
+    metadata:
+      labels:
+        app: jsmnt-noexist
+    spec:
+      containers:
+        - name: jsmnt-noexist
+          image: acrmnt.azurecr.io/node-noexist:v1
+          ports:
+            - containerPort: 3000

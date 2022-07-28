@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jsmnt-service
+  labels:
+    app: jsmnt-service
+spec:
+  type: ClusterIP
+  selector:
+    app: jsmnt
+  ports:
+    - port: 80
+      targetPort: 3000

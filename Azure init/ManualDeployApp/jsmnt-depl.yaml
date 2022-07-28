@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jsmnt-deployment
+  labels:
+    app: jsmnt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jsmnt
+  template:
+    metadata:
+      labels:
+        app: jsmnt
+    spec:
+      containers:
+        - name: jsmnt
+          image: acrmnt.azurecr.io/node-docker-mnt:8c1f890b
+          ports:
+            - containerPort: 3000
