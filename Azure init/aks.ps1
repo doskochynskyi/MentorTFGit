@@ -46,9 +46,10 @@ kubectl create namespace $NAMESPACE
 $nodeRGCont = az aks show --resource-group rgcontainer --name aksmnt --query nodeResourceGroup -o tsv
 
 # TEMPLATE - Create a public IP address with the static allocation
-$pipAKSIngress = az network public-ip create --resource-group $nodeRGCont --name PIPAKSForIngressNew --sku Standard --allocation-method static --query publicIp.ipAddress -o tsv
+#$pipAKSIngress = az network public-ip create --resource-group $nodeRGCont --name PIPAKSForIngressNew --sku Standard --allocation-method static --query publicIp.ipAddress -o tsv
 
-$pipAKSIngress = "23.97.137.194"
+# get from mc_ resource group
+$pipAKSIngress = "20.31.49.188"
 
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo add stable https://kubernetes-charts.storage.googleapis.com/
@@ -153,13 +154,15 @@ helm list
 kubectl api-resources
 
 kubectl get pods --all-namespaces
-kubectl get deployment
+kubectl get deployment --all-namespaces
 kubectl get service --all-namespaces
 kubectl get ingress --all-namespaces
 kubectl delete ingress ingress-default-site
+ 
 
 # delete all ingressclass 
 kubectl get ingressclass --all-namespaces
+kubectl describe ingressclass --all-namespaces
 kubectl delete ingressclass nginx --all-namespaces
 
 #kubectl create -f .\default-ingressclass.yaml
@@ -171,33 +174,132 @@ kubectl describe -A ValidatingWebhookConfiguration
 kubectl delete validatingwebhookconfigurations nginx-ingress-ingress-nginx-admission
 kubectl delete  nginx-ingress-ingress-nginx-controller-f7f697598
 
-kubectl delete deployment nginx-ingress-ingress-nginx-controller
+kubectl delete deployment mntdevga-app --namespace dev
+kubectl delete pod mntdevga-app-test-connection --namespace dev
+kubectl delete service  mntdevga-app --namespace dev
+kubectl delete ingress  mntdevga-app --namespace dev
 
 
-kubectl exec -it --namespace=default jsmnt-deployment-84d766b57b-6z2d5 -- bash 
 
+############################################
+cd 'C:\Users\Ivan\OneDrive - SoftServe, Inc\Documents\git\MentorTFGit\Azure init\ManualDeployApp'
 kubectl create -f .\jsmnt-depl.yaml
-
-kubectl describe deployment jsmnt-deployment
-
 kubectl create -f .\jsmnt-service.yaml
 kubectl create -f .\jsmnt-ingress.yaml
 
-kubectl describe pod jsmnt-deployment-84d766b57b-6z2d5
-
+kubectl delete deployment jsmnt-deployment
+kubectl delete pod jsmnt-deployment-84d766b57b-6rthd
+kubectl describe deployment jsmnt-deployment
+kubectl describe pod mntdevga-app-68885d6cd4-4k255
 kubectl describe service jsmnt-service
 #kubectl delete service jsmnt-service 
 kubectl describe ingress jsmnt-ingress
+#kubectl delete ingress jsmnt-ingress
 
 kubectl run -it --rm aks-ingress-test --image=mcr.microsoft.com/dotnet/runtime-deps:6.0 --namespace ingress-basic
 
-kubectl exec -it --namespace=ingress-basic aks-ingress-test -- sh
-
-kubectl exec --stdin --tty --namespace=ingress-basic aks-ingress-test -- /bin/bash
+kubectl exec -it mntdevga-app-88b4dc49b-288ls --namespace dev -- /bin/bash
+kubectl exec --stdin --tty mntdevga-app-88b4dc49b-288ls --namespace dev -- /bin/bash
 
 kubectl apply -f https://k8s.io/examples/application/shell-demo.yaml
 
-kubectl exec --stdin --tty shell-demo -- /bin/bash
-
 kubectl create -f .\jsmnt-depl-noexist.yaml
 
+mkdir chart
+cd .\chart
+
+helm create mntapp
+
+####################################################
+cd 'C:\Users\Ivan\OneDrive - SoftServe, Inc\Documents\git\MentorTFGit\Azure init'
+
+helm install mntdev --namespace dev --create-namespace --values values-dev.yaml  .\chart\app
+helm list -A
+helm uninstall mntdev --namespace dev
+kubectl describe pod  mntdevga-app-5b8ddf9b5c-85zbr --namespace dev
+kubectl describe service mntdevga-app --namespace dev
+kubectl describe ingress mntdevga-app --namespace dev
+kubectl logs mntdev-app --namespace dev
+kubectl logs ingress-nginx-controller-55dcf56b68-pdz8n --namespace ingress-basic
+kubectl logs mntdevga-app-88b4dc49b-288ls --namespace dev
+
+
+
+#######################################################
+#########    Use TLS by kubernetes secret      ########     
+#
+# https://kubernetes.io/docs/concepts/services-networking/ingress/#tls
+# 
+
+New-SelfSignedCertificate -DnsName "mntjsdev.com" -CertStoreLocation "cert:\LocalMachine\My"
+
+openssl pkcs12 -in mntjsdev.pfx -nocerts -out p.key -nodes -passin pass:123
+openssl pkcs12 -in mntjsdev.pfx -nokeys -out mntjsdev.crt -nodes -passin pass:123
+
+
+kubectl create secret tls dev-tls-secret `
+  --cert=.\mntjsdev.crt `
+  --key=.\mntjsdev.key
+
+kubectl get secret dev-tls-secret
+kubectl describe secret
+
+
+cd 'C:\Users\Ivan\OneDrive - SoftServe, Inc\Documents\git\MentorTFGit\Azure init\ManualDeployApp'
+kubectl create -f .\jsmnt-depl.yaml
+kubectl create -f .\jsmnt-service.yaml
+kubectl create -f .\jsmnt-ingress-k8s-secret.yaml
+
+#########################################
+# MS install cert-manager
+<#
+$RegistryName = "<REGISTRY_NAME>"
+$ResourceGroup = (Get-AzContainerRegistry | Where-Object {$_.name -eq $RegistryName} ).ResourceGroupName
+$CertManagerRegistry = "quay.io"
+$CertManagerTag = "v1.8.0"
+$CertManagerImageController = "jetstack/cert-manager-controller"
+$CertManagerImageWebhook = "jetstack/cert-manager-webhook"
+$CertManagerImageCaInjector = "jetstack/cert-manager-cainjector"
+
+Import-AzContainerRegistryImage -ResourceGroupName $ResourceGroup -RegistryName $RegistryName -SourceRegistryUri $CertManagerRegistry -SourceImage "${CertManagerImageController}:${CertManagerTag}"
+Import-AzContainerRegistryImage -ResourceGroupName $ResourceGroup -RegistryName $RegistryName -SourceRegistryUri $CertManagerRegistry -SourceImage "${CertManagerImageWebhook}:${CertManagerTag}"
+Import-AzContainerRegistryImage -ResourceGroupName $ResourceGroup -RegistryName $RegistryName -SourceRegistryUri $CertManagerRegistry -SourceImage "${CertManagerImageCaInjector}:${CertManagerTag}"
+
+
+helm install cert-manager jetstack/cert-manager `
+  --namespace ingress-basic `
+  --version $CertManagerTag `
+  --set installCRDs=true `
+  --set nodeSelector."kubernetes\.io/os"=linux `
+  --set image.repository="${AcrUrl}/${CertManagerImageController}" `
+  --set image.tag=$CertManagerTag `
+  --set webhook.image.repository="${AcrUrl}/${CertManagerImageWebhook}" `
+  --set webhook.image.tag=$CertManagerTag `
+  --set cainjector.image.repository="${AcrUrl}/${CertManagerImageCaInjector}" `
+  --set cainjector.image.tag=$CertManagerTag
+#>
+
+
+######################################################
+# from cert-manager.io
+helm repo add jetstack https://charts.jetstack.io
+
+helm repo update
+
+helm install `
+  cert-manager jetstack/cert-manager `
+  --namespace ingress-basic `
+  --version v1.9.1 `
+  --set installCRDs=true 
+
+kubectl get pod --namespace ingress-basic
+
+kubectl create -f .\jsmnt-issuer-certmanager-dev.yaml
+
+kubectl create -f .\jsmnt-ingress-certmanager-dev.yaml
+kubectl describe ingress jsmnt-ingress
+kubectl get certificate
+kubectl describe certificate  jsmnt-dev-tls
+kubectl describe secret jsmnt-dev-tls
+kubectl describe issuer letsencrypt-dev
+#kubectl delete ingress jsmnt-ingress
