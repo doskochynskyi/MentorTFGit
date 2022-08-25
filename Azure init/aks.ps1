@@ -11,22 +11,10 @@ echo $env:path
 
 az aks get-credentials --resource-group RGContainer --name AKSmnt
 
-kubectl.exe get node
 
-kubectl.exe describe pod
-
-kubectl.exe get pod
-
-kubectl.exe get deployment
-
-kubectl.exe describe service
-
-kubectl.exe get ns
-
-kubectl.exe get ingress
-
-
-
+################################################
+########    Install helm       #################
+################################################
 
 #Install chocolatey. must be run as administrator
 Set-ExecutionPolicy Bypass -Scope Process -Force; 
@@ -40,7 +28,10 @@ $NAMESPACE="ingress-basic"
 kubectl create namespace $NAMESPACE
 
 
-# ------------
+################################################
+######## Install nginx ingress #################
+################################################
+
 # https://stacksimplify.com/azure-aks/azure-kubernetes-service-ingress-basics/
 # Get the resource group name of the AKS cluster 
 $nodeRGCont = az aks show --resource-group rgcontainer --name aksmnt --query nodeResourceGroup -o tsv
@@ -75,8 +66,6 @@ kubectl get service -l app.kubernetes.io/name=ingress-nginx --namespace ingress-
 kubectl get pods -n ingress-basic
 kubectl get all -n ingress-basic
 
-cd 'C:\Users\Ivan\OneDrive - SoftServe, Inc\Documents\git\MentorTFGit\Azure init'
-
 #-------------------
 
 kubectl get service --namespace $NAMESPACE
@@ -87,7 +76,7 @@ kubectl get ingress --namespace $NAMESPACE
 kubectl get deployment --namespace $NAMESPACE
 kubectl get service --namespace $NAMESPACE
 
-
+# MS guide to install nginx ingress
 $REGISTRY_NAME="acrmnt"
 $SOURCE_REGISTRY="k8s.gcr.io"
 $CONTROLLER_IMAGE="ingress-nginx/controller"
@@ -109,9 +98,9 @@ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 $ACR_URL="acrmnt.azurecr.io"
 
 
-
-
 cd 'C:\Users\Ivan\OneDrive - SoftServe, Inc\Documents\git\MentorTFGit\Azure init'
+# https://github.com/doskochynskyi/MentorTFGit.git
+
 # Use Helm to deploy an NGINX ingress controller
 helm install nginx-ingress ingress-nginx/ingress-nginx `
     --version "4.1.3" `
@@ -175,14 +164,18 @@ kubectl delete validatingwebhookconfigurations nginx-ingress-ingress-nginx-admis
 kubectl delete  nginx-ingress-ingress-nginx-controller-f7f697598
 
 kubectl delete deployment mntdevga-app --namespace dev
-kubectl delete pod mntdevga-app-test-connection --namespace dev
+kubectl delete pod mntdevga-app-5d4f48f8f-2wlr7 --namespace dev
 kubectl delete service  mntdevga-app --namespace dev
 kubectl delete ingress  mntdevga-app --namespace dev
 
 
+################################################
+########       Deploy app manually      ########
+################################################
 
-############################################
 cd 'C:\Users\Ivan\OneDrive - SoftServe, Inc\Documents\git\MentorTFGit\Azure init\ManualDeployApp'
+# https://github.com/doskochynskyi/MentorTFGit.git
+
 kubectl create -f .\jsmnt-depl.yaml
 kubectl create -f .\jsmnt-service.yaml
 kubectl create -f .\jsmnt-ingress.yaml
@@ -210,8 +203,13 @@ cd .\chart
 
 helm create mntapp
 
-####################################################
+
+################################################
+########       Deploy app by helm       ########
+################################################
+
 cd 'C:\Users\Ivan\OneDrive - SoftServe, Inc\Documents\git\MentorTFGit\Azure init'
+# https://github.com/doskochynskyi/MentorTFGit.git
 
 helm install mntdev --namespace dev --create-namespace --values values-dev.yaml  .\chart\app
 helm list -A
@@ -224,18 +222,36 @@ kubectl logs ingress-nginx-controller-55dcf56b68-pdz8n --namespace ingress-basic
 kubectl logs mntdevga-app-88b4dc49b-288ls --namespace dev
 
 
+#########################################################
+########       Deploy app by github actions      ########
+#########################################################
 
-#######################################################
-#########    Use TLS by kubernetes secret      ########     
-#
+https://github.com/doskochynskyi/MentorAKS/
+
+
+#############################################################################
+#########    Generate certificate manually and put it to secret      ########     
+#############################################################################
+
 # https://kubernetes.io/docs/concepts/services-networking/ingress/#tls
-# 
+ 
 
 New-SelfSignedCertificate -DnsName "mntjsdev.com" -CertStoreLocation "cert:\LocalMachine\My"
 
 openssl pkcs12 -in mntjsdev.pfx -nocerts -out p.key -nodes -passin pass:123
 openssl pkcs12 -in mntjsdev.pfx -nokeys -out mntjsdev.crt -nodes -passin pass:123
 
+<#
+apiVersion: v1
+kind: Secret
+metadata:
+  name: testsecret-tls
+  namespace: default
+data:
+  tls.crt: base64 encoded cert
+  tls.key: base64 encoded key
+type: kubernetes.io/tls
+#>
 
 kubectl create secret tls dev-tls-secret `
   --cert=.\mntjsdev.crt `
@@ -246,12 +262,16 @@ kubectl describe secret
 
 
 cd 'C:\Users\Ivan\OneDrive - SoftServe, Inc\Documents\git\MentorTFGit\Azure init\ManualDeployApp'
+# https://github.com/doskochynskyi/MentorTFGit.git
 kubectl create -f .\jsmnt-depl.yaml
 kubectl create -f .\jsmnt-service.yaml
 kubectl create -f .\jsmnt-ingress-k8s-secret.yaml
 
-#########################################
-# MS install cert-manager
+
+#######################################################
+########    MS guide to install cert-manager   ########
+#######################################################
+
 <#
 $RegistryName = "<REGISTRY_NAME>"
 $ResourceGroup = (Get-AzContainerRegistry | Where-Object {$_.name -eq $RegistryName} ).ResourceGroupName
@@ -280,8 +300,14 @@ helm install cert-manager jetstack/cert-manager `
 #>
 
 
-######################################################
-# from cert-manager.io
+###########################################################################
+#######    Genarate certificate by cert-manager.io automatically    #######
+###########################################################################
+
+# https://cert-manager.io/docs/configuration/acme/#adding-multiple-solver-types
+# https://cert-manager.io/docs/tutorials/acme/nginx-ingress/#certificates
+# https://cert-manager.io/docs/installation/helm/#3-install-customresourcedefinitions
+
 helm repo add jetstack https://charts.jetstack.io
 
 helm repo update
@@ -293,13 +319,107 @@ helm install `
   --set installCRDs=true 
 
 kubectl get pod --namespace ingress-basic
+kubectl get pod --namespace dev
+kubectl get svc --namespace dev
 
-kubectl create -f .\jsmnt-issuer-certmanager-dev.yaml
 
+kubectl create -f .\jsmnt-issuer-certmanager-dev.yaml --namespace dev
 kubectl create -f .\jsmnt-ingress-certmanager-dev.yaml
+
 kubectl describe ingress jsmnt-ingress
-kubectl get certificate
-kubectl describe certificate  jsmnt-dev-tls
+kubectl get certificate  --all-namespaces
+kubectl describe certificate  jsmnt-dev-tls --namespace dev
 kubectl describe secret jsmnt-dev-tls
-kubectl describe issuer letsencrypt-dev
+kubectl describe issuer letsencrypt-dev --namespace dev
 #kubectl delete ingress jsmnt-ingress
+kubectl get issuer --namespace dev
+kubectl get secret --all-namespaces 
+kubectl get secret --namespace dev
+kubectl describe secret letsencrypt-dev --namespace dev
+kubectl describe secret jsmnt-dev-tls --namespace dev
+kubectl delete issuer letsencrypt-dev
+kubectl delete secret jsmnt-dev-tls
+
+
+helm list --all-namespaces
+helm show chart cert-manager  --all-namespaces
+helm template .\test\charts\app
+helm verify .\test\charts\app
+kubectl get all -n dev
+
+
+#########################################################
+########       Monitoring by Azure Monitor       ########
+#########################################################
+
+$laAKSid = az resource list --resource-type Microsoft.OperationalInsights/workspaces  --query '[].id' -o tsv
+az aks enable-addons -a monitoring -n aksmnt -g rgcontainer --workspace-resource-id $laAKSid
+
+kubectl get ds omsagent --namespace=kube-system
+
+kubectl get configmap --all-namespaces
+
+kubectl describe configmap coredns --namespace kube-system
+
+
+#########################################################
+#######    Monitoring by Prometheus + Grafana     #######
+#########################################################
+
+helm repo add stable https://charts.helm.sh/stable
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+helm search repo prometheus-community
+
+kubectl create namespace prometheus
+
+helm install stable prometheus-community/kube-prometheus-stack -n prometheus
+
+kubectl get -n monitoring crds
+kubectl get -n prometheus crds
+kubectl get ns
+
+kubectl get pods -n prometheus
+kubectl get all -n prometheus
+
+kubectl get svc -n prometheus
+kubectl get ingress -n prometheus
+
+kubectl describe pods prometheus-stable-kube-prometheus-sta-prometheus-0 -n prometheus
+kubectl logs prometheus-stable-kube-prometheus-sta-prometheus-0 -n prometheus
+kubectl describe svc stable-kube-prometheus-sta-prometheus -n prometheus
+kubectl get pods -l app=hostnames
+kubectl logs stable-kube-prometheus-sta-prometheus -n prometheus
+kubectl get ingress prom-ingress -n prometheus
+kubectl describe ingress prom-ingress -n prometheus
+kubectl delete ingress prom-ingress -n prometheus
+
+kubectl describe pods stable-grafana-6f8bccdd57-59cxl -n prometheus
+kubectl describe svc stable-grafana -n prometheus
+kubectl get ingress grafana-ingress -n prometheus
+kubectl describe ingress grafana-ingress -n prometheus
+
+kubectl edit svc stable-kube-prometheus-sta-prometheus -n prometheus
+
+kubectl edit svc stable-grafana -n prometheus
+
+kubectl create -f .\prometheus-ingress-certmanager-tls.yaml --namespace prometheus
+kubectl create -f .\grafana-ingress-certmanager-tls.yaml --namespace prometheus
+
+kubectl logs ingress-nginx-controller-55dcf56b68-6kxb7 -n ingress-basic
+kubectl logs ingress-nginx-controller-55dcf56b68-prlxr -n ingress-basic
+
+$grPod = "stable-grafana-ddb6b668d-d2dlk"
+kubectl logs --follow $grPod -c grafana --namespace prometheus
+kubectl logs $grPod -c grafana --namespace prometheus
+kubectl logs --tail=10 $grPod -c grafana --namespace prometheus
+
+kubectl get deploy --all-namespaces
+kubectl edit deploy stable-grafana --namespace prometheus
+kubectl describe pvc stable-grafana --namespace prometheus
+
+kubectl get pvc --namespace prometheus
+kubectl get pod -A
+kubectl get all -A
+
